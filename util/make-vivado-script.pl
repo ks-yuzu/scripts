@@ -34,7 +34,7 @@ if ( $f_template_gen ) {
   my $conf_template = <<EOF;
 {
   # HW 設計ファイルの設定
-  design_files      => [ 'sample.v', 'alu.v', 'LDST.v' ], # verilog ファイル
+  design_files      => [ 'sample.v', 'alu.v', 'LDST.v' ], # デザインファイル (verilog)
   top_module        => 'mips_hw',                         # トップモジュール名
 
   # シミュレーション用のファイルの設定
@@ -44,6 +44,8 @@ if ( $f_template_gen ) {
   # 基本的に以下は放置で OK
   # ワークスペース名？
   workspace         => 'work',
+
+  # ターゲット
   target            => 'xc7a100tcsg324-3',
 
   # スクリプトファイル名
@@ -124,7 +126,6 @@ sub make_synth_script {
   push @parse, "echo -n 'Delay: '\n";
   push @parse, q!grep -A 10 'Max Delay Paths' report_timing.txt | perl -nE '/Data Path Delay:\s*(.*?ns)/ && say $1'!;
 
-  
   path("parse-report.sh")->spew(@parse);
   path("parse-report.sh")->chmod(0775);
 }
