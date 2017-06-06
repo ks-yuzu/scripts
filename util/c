@@ -1,0 +1,9 @@
+#!/usr/bin/env zsh
+
+LINE_NUM=$(($LINES - 1))
+
+if [ $(/bin/cat "$@" | grep -c '' | perl -ae 'print $F[0]') -lt $LINE_NUM ]; then
+    /bin/cat "$@"
+else
+    /bin/cat "$@" | less
+fi

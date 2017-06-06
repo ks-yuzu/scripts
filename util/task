@@ -1,0 +1,31 @@
+#!/usr/bin/env perl
+use v5.24;
+use warnings;
+use diagnostics;
+
+use Path::Class;
+
+use Getopt::Kingpin;
+
+# parse option
+my $kingpin  = Getopt::Kingpin->new();
+my $f_detail = $kingpin->flag('detail', 'detail')->short('d')->bool;
+my $f_edit   = $kingpin->flag('edit', 'edit')->short('e')->bool;
+$kingpin->parse;
+
+# vars
+my $HOME = $ENV{HOME};
+my $filepath = "$HOME/Dropbox/todo.org";
+
+# edit
+if ( $f_edit ) {
+  system "emacsclient -n $filepath";
+  exit;
+}
+
+# read todo-file
+my @lines = (file $filepath)->slurp(chomp => 0);
+
+say $f_detail ?
+  grep {s/(^[^\*].*)/  $1/g, $_} @lines :
+  grep { m/^\*/ } @lines;

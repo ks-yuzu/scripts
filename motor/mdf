@@ -1,0 +1,66 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use v5.10;
+use Getopt::Long;
+
+
+my $digit = 4;
+my $array_length = 2000;
+my $f_disp_address = 0;
+my $f_help = 0;
+my $f_raw = 0;
+GetOptions(
+    'd=i' => \$digit,
+    'l=i' => \$array_length,
+    'a'   => \$f_disp_address,
+    'h'   => \$f_help,
+    'r'   => \$f_raw,
+);
+
+usage() && exit(0) if $f_help;
+
+my $file  = shift // die 'need file specification';
+my $var   = shift // die 'need var specification';
+
+
+# process
+my @dmem_list = qx(grep '^//.*<.*$var.*>.*' ${file}_d.mem);
+if( @dmem_list > 1 ) {
+    print for @dmem_list;
+    die 'too many hit variables';
+} elsif ( @dmem_list < 1 ) {
+    die 'no hit variables';
+}
+
+
+say "[ " . substr($dmem_list[0], 2, -2) . " ]";
+my $address = '0' . substr $dmem_list[0], 3, 7;
+
+my @mem = qx(sed -ne '/${address}/,//p' ${file}_mem_dump.txt | head -n ${array_length});
+for( @mem ) {
+    /^(.{8}: )(..) (..) (..) (..).*$/;
+    print $1 if $f_disp_address;
+
+    printf
+        $f_raw                    ? $2.$3.$4.$5 . "\n" :
+        $2.$3.$4.$5 eq 'xxxxxxxx' ? $2.$3.$4.$5 . "\n" :
+                                    ('%.' . $digit . 'f' . "\n", hex2float($2.$3.$4.$5));
+}
+
+sub hex2float {
+    my $data = hex(shift);
+    my $sign     = ($data & 0x80000000) ? -1 : 1;
+    my $exponent = (($data & 0x7F800000) >> 23) - 127;
+    my $fraction = ($data & 0x007FFFFF | 0x00800000);
+    return $sign * (2 ** $exponent) * ($fraction / (1 << 23));
+}
+
+sub usage {
+    print << 'EOS';
+    '-d <num>'  : specify digit,
+    '-l <line>' : specify array-length
+    '-a'        : display address
+    '-h'        : help
+EOS
+}

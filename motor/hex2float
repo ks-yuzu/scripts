@@ -1,0 +1,52 @@
+#!/usr/bin/env perl
+use v5.20;
+use warnings;
+use diagnostics;
+
+use Path::Class;
+use Getopt::Long;
+
+my $infile = undef;
+my $outfile = undef;
+GetOptions(
+    'input=s'  => \$infile,
+    'output=s' => \$outfile,
+);
+
+
+if ( !defined $infile && (defined $outfile || !$ARGV[0] )) {
+    usage();
+    exit;
+}
+
+if ( !defined $infile && !defined $outfile ) {
+    say hex2float(shift);
+    exit;
+}
+
+
+my @lines = (file $infile)->slurp(chomp => 1);
+
+for ( @lines ) {
+    $_ = hex2float($_);
+}
+
+say for @lines;
+
+
+sub hex2float {
+    my $data     = hex shift;
+    my $sign     = ($data & 0x80000000) ? -1 : 1;
+    my $exponent = (($data & 0x7F800000) >> 23) - 127;
+    my $fraction = ($data & 0x007FFFFF | 0x00800000);
+    return "%.10f", $sign * (2 ** $exponent) * ($fraction / (1 << 23));
+}
+
+
+sub usage {
+    print <<'EOS';
+usage :
+  $ hex2float (hex)
+  $ hex2float [-i infile [-o outfile]]
+EOS
+}

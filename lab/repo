@@ -1,0 +1,14 @@
+#!/usr/bin/env perl
+use v5.24;
+use warnings;
+
+my $date = shift // qx/date --iso-8601/;
+chomp $date;
+my $file = $date . "-hls-oosako.org";
+
+system <<EOF;
+cd ~/works/lab/report
+emacsclient -n $file
+EOF
+
+

@@ -1,0 +1,14 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+$_ = shift;
+s/ //g;
+my $strhex = unpack "H*", pack('B' . length,  $_);
+
+my $data     = hex $strhex;
+my $sign     = ($data & 0x80000000) ? -1 : 1;
+my $exponent = (($data & 0x7F800000) >> 23) - 127;
+my $fraction = ($data & 0x007FFFFF | 0x00800000);
+print $sign * (2 ** $exponent) * ($fraction / (1 << 23));
+

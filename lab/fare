@@ -1,0 +1,17 @@
+#!/usr/bin/env perl
+use v5.24;
+use warnings;
+use diagnostics;
+
+my $path = '~/works/lab/fare/';
+
+my $date = shift // die 'fare <date> [year] [subject]';
+my $year = shift // qx'date --iso-8601 | perl -aF- -e \'print $F[0]\'';
+my $subject = shift // 'astem';
+
+my $filename = "$subject-$year$date.org";
+system "cd $path; cp template2.org $filename";
+system "cd $path; emacsclient -n $path$filename";
+
+
+

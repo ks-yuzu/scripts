@@ -1,0 +1,1 @@
+git diff --numstat | awk '{if (($1 == "0" && $2 == "0") || ($1 == "-" && $2 == "-")) print $3}' | xargs git checkout HEAD

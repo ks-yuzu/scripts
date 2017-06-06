@@ -1,0 +1,16 @@
+#!/usr/bin/env perl
+use v5.24;
+use warnings;
+use Term::ANSIColor qw(:constants);
+
+my $OK = "[  " . color("OK", GREEN) . "  ]  ";
+my $NG = "[  " . color("NG", RED  ) . "  ]  ";
+
+print $NG;
+
+sub color {
+    my $str = shift;
+    my $style = shift;
+    return "${style}${str}" . RESET;
+}
+
