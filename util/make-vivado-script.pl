@@ -9,7 +9,7 @@ my $kingpin = Getopt::Kingpin->new();
 my $f_sim          = $kingpin->flag('sim', 'generate simlation script')->default(0)->bool;
 my $f_synth        = $kingpin->flag('synth', 'generate synthesis script')->default(0)->bool;
 my $f_delete       = $kingpin->flag('delete', 'delete script')->short('d')->bool;
-my $f_template_gen = $kingpin->flag('generate', 'generate template')->short('g')->bool;
+my $f_template_gen = $kingpin->flag('template', 'generate template')->short('t')->bool;
 my $config_file    = $kingpin->arg('config-file', 'config file name')->string;
 
 $kingpin->parse;
@@ -17,14 +17,18 @@ $kingpin->parse;
 
 # 入力ファイルチェック
 if ( ! $f_template_gen && ! $config_file ) {
-  say '[Error] no input config file.';
+  say '[Error] no input or option.';
   say '';
-  say 'To generate the template of configuration, ';
+  say '1. generate a template of configuration';
+  say '  $ ' . path( $0 )->basename . ' -t [filename]';
   say '';
-  say '  $ ' . path( $0 )->basename . ' -g [filename]';
+  say '2. edit the configuration file';
+  say '';
+  say '3. generate script files for simulation and synth';
+  say '  $ ' . path( $0 )->basename . ' [filename]';
   say '';
 
-  die "\n";
+  exit(1);
 }
 
 
