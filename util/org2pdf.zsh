@@ -66,7 +66,7 @@ EOF
 
 # compile
 echo "compile $tex_file"
-texcompile.sh $tex_file
+tex2pdf $tex_file
 
 if [ -f ${basename}.out ]; then
     rm ${basename}.out
