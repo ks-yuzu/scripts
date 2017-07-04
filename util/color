@@ -1,1 +1,4 @@
+#!/usr/bin/env zsh
+set -euo pipefail
+
 grep --color=auto -E '$1|$'
