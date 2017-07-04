@@ -65,4 +65,4 @@ fi
 rm ${filename}.dvi
 rm ${filename}.aux
 rm ${filename}.log
-rm ${filename}.toc
+([ -f ${filename}.toc ] && rm ${filename}.toc) || true
