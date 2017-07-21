@@ -58,7 +58,7 @@ if ( $f_template_gen ) {
 }
 EOF
 
-  path( $config_file || 'vivado-script.conf' )->spew($conf_template);
+  path( $config_file || './vivado-script.conf' )->spew($conf_template);
   exit(0);
 }
 
