@@ -11,7 +11,7 @@ use DDP;
 use Time::Piece;
 
 use lib "$ENV{HOME}/works/";
-use MyPassword::Archive;                          # ID, PW
+use MyPassword::Archive; # ID, PW
 
 
 # constant
@@ -62,7 +62,7 @@ sub { # main
 
   # ダウンロード
   if ( $options{f_download} && !$options{f_recursive} ) {
-    die "specify the donwload file" if scalar @args == 0;    # ファイル指定チェック
+    die "specify the donwload file" if scalar @args == 0;  # ファイル指定チェック
     for my $file ( @args ) {
       download($file, \%options);
     }
@@ -76,6 +76,28 @@ sub { # main
 }->();
 
 
+sub check_error_in_res {
+  my ($res, $options) = @_;
+
+  # レスポンスチェック
+  die "no response from server\n" if not defined $res;
+
+  # アクセスチェック
+  die $res->content if $res->content =~ /Can't connect to/;
+
+  # 認証チェック
+  die $res->content if $res->content =~ /このページを見るのには許可が必要です/;
+
+  # HTTP のレスポンスを表示 (-v)
+  say $res->content if $options->{f_verbose};
+
+  # ディレクトリエラーチェック
+  if ( $res->content =~ /invalid dir\((?<dir>.*?)\)/ ) {
+    die "Invalid dir: $+{dir}\n"
+  }
+}
+
+
 sub show {
   my ($dir, $options) = @_;
 
@@ -85,15 +107,8 @@ sub show {
   my $ua = LWP::UserAgent->new();
   my $res = $ua->request($req);
 
-  # レスポンスチェック
-  die "no response from server\n" if not defined $res;
-  die $res->content if $res->content =~ /Can't connect to/;
-
-  # HTTP のレスポンスを表示 (-v)
-  say $res->content if $options->{f_verbose};
-
-  # ディレクトリエラーチェック
-  die "Invalid dir: $dir\n" if $res->content =~ /invalid dir\($dir\)/;
+  # HTTP レスポンスからエラーチェック
+  check_error_in_res($res, $options);
 
   # リスト出力
   show_parse_res($res->content, $options);
@@ -159,22 +174,15 @@ sub upload {
   # HTTP リクエストを作って投げる
   my $req = POST(
     $URL,
-    Content_Type => 'form-data',
+    Content_Type => 'multipart/form-data',
     Content      => $content
   );
   $req->authorization_basic($USER, $PASS);
   my $ua = LWP::UserAgent->new();
   my $res = $ua->request($req);
 
-  # レスポンスチェック
-  die "no response from server\n" if not defined $res;
-  die $res->content if $res->content =~ /Can't connect to/;
-
-  # HTTP のレスポンスを表示 (-v)
-  say $res->content if $options->{f_verbose};
-
-  # ディレクトリエラーチェック
-  die "Invalid dir: $dir\n" if $res->content =~ /invalid dir\($dir\)/;
+  # HTTP レスポンスからエラーチェック
+  check_error_in_res($res, $options);
 
   # ファイル一覧出力
   my @files = $res->content =~ /uploaded '(.*?)'/g;
@@ -197,15 +205,8 @@ sub download {
   my $ua = LWP::UserAgent->new();
   my $res = $ua->request($req);
 
-  # レスポンスチェック
-  die "no response from server\n" if not defined $res;
-  die $res->content if $res->content =~ /Can't connect to/;
-
-  # HTTP のレスポンスを表示 (-v)
-  say $res->content if $options->{f_verbose};
-
-  # ディレクトリエラーチェック
-  die "Invalid dir: $dir\n" if $res->content =~ /invalid dir\($dir\)/;
+  # HTTP レスポンスからエラーチェック
+  check_error_in_res($res, $options);
 
   # 出力
   $filename = $options->{output} if $options->{output};
@@ -237,20 +238,8 @@ sub download_zip {
   my $ua = LWP::UserAgent->new();
   my $res = $ua->request($req);
 
-  # レスポンスチェック
-  die "no response from server\n" if not defined $res;
-
-  # アクセスチェック
-  die $res->content if $res->content =~ /Can't connect to/;
-
-  # 認証チェック
-  die $res->content if $res->content =~ /このページを見るのには許可が必要です/;
-
-  # HTTP のレスポンスを表示 (-v)
-  say $res->content if $options->{f_verbose};
-
-  # ディレクトリエラーチェック
-  die "Invalid dir: $dir\n" if $res->content =~ /invalid dir\($dir\)/;
+  # HTTP レスポンスからエラーチェック
+  check_error_in_res($res, $options);
 
   # 出力パスの決定
   my $path;
