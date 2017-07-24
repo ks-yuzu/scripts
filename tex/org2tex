@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+FILE=$1
+
+emacs -l ~/.emacs.d/inits/setting-org-mode.el --batch $FILE --eval="(org-latex-export-to-latex)"
