@@ -4,32 +4,40 @@ use warnings;
 
 use HTTP::Request::Common;
 use LWP::UserAgent;
-use Getopt::Kingpin;
 use List::Util qw/max/;
+use Path::Tiny;
+use Getopt::Kingpin;
 use DDP;
+use Time::Piece;
 
 use lib "$ENV{HOME}/works/";
 use MyPassword::Archive;                          # ID, PW
+
 
 # constant
 my $URL = 'http://ist.ksc.kwansei.ac.jp/~ishiura/cgi-bin/webfiler/lab/main.cgi';
 my $USER = MyPassword::Archive::USER;
 my $PASS = MyPassword::Archive::PASS;
 
+
 sub { # main
   my $kingpin = Getopt::Kingpin->new();
-  my %options;
-  $options{f_show}    = $kingpin->flag('show',    'show the list of files')->short('s')->bool;
-  $options{f_upload}  = $kingpin->flag('upload',  'upload files'          )->short('u')->bool;
-  $options{f_list}    = $kingpin->flag('long',    'long listing (like ls)')->short('l')->bool;
-  $options{f_verbose} = $kingpin->flag('verbose', 'show http response'    )->short('v')->bool;
+  my %options = (
+    f_show      => $kingpin->flag('show',         'show the list of files' )->short('s')->bool,
+    f_list      => $kingpin->flag('long',         'long listing (like ls)' )->short('l')->bool,
+    f_upload    => $kingpin->flag('upload',       'upload files'           )->short('u')->bool,
+    f_download  => $kingpin->flag('download',     'download files'         )->short('d')->bool,
+    f_recursive => $kingpin->flag('download zip', 'download files'         )->short('r')->bool,
+    f_verbose   => $kingpin->flag('verbose',      'show http response'     )->short('v')->bool,
+    output      => $kingpin->flag('output',       'specify output filename')->short('o')->string,
+  );
   my $args_obj  = $kingpin->arg('args',     'dir file1 file2 ...'   )->string_list;
   $kingpin->parse;
 
   my @args = @{ $args_obj->value };
 
-  # list, upload 指定がなければ list
-  if ( ! $options{f_show} and ! $options{f_upload} ) {
+  # show, upload, download 指定がなければ show
+  if ( !$options{f_show} and !$options{f_upload} and !$options{f_download} ) {
     $options{f_show} = 1;
   }
 
@@ -38,13 +46,13 @@ sub { # main
 
   # ファイル一覧表示
   if ( $options{f_show} ) {
-    my $dir = shift @args // die "specify the upload dir"; # ディレクトリチェック
-    list($dir, \%options);
+    my $dir = shift @args // die "specify the upload dir"; # ディレクトリ指定チェック
+    show($dir, \%options);
   }
 
   # アップロード
   if ( $options{f_upload} ) {
-    my $dir = shift @args // die "specify the upload dir"; # ディレクトリチェック
+    my $dir = shift @args // die "specify the upload dir"; # ディレクトリ指定チェック
     die "no input file\n" if scalar @args == 0;            # ファイル指定チェック
     for my $file ( @args ) {                               # ファイル存在チェック
       die "file '$file' does not exist.\n" if not -f $file;
@@ -53,13 +61,22 @@ sub { # main
   }
 
   # ダウンロード
-  if ( 1 ) {
-    
+  if ( $options{f_download} && !$options{f_recursive} ) {
+    die "specify the donwload file" if scalar @args == 0;    # ファイル指定チェック
+    for my $file ( @args ) {
+      download($file, \%options);
+    }
+  }
+
+  # zip ダウンロード
+  if ( $options{f_download} && $options{f_recursive} ) {
+    my $dir = shift @args // die "specify the donwload dir"; # ディレクトリ指定チェック
+    download_zip($dir, \%options);
   }
 }->();
 
 
-sub list {
+sub show {
   my ($dir, $options) = @_;
 
   # HTTP リクエストを作って投げる
@@ -79,11 +96,11 @@ sub list {
   die "Invalid dir: $dir\n" if $res->content =~ /invalid dir\($dir\)/;
 
   # リスト出力
-  list_parse_res($res->content, $options);
+  show_parse_res($res->content, $options);
 };
 
 
-sub list_parse_res {
+sub show_parse_res {
   my ($res, $options) = @_;
 
   # HTTP レスポンスのパース
@@ -106,8 +123,6 @@ sub list_parse_res {
     say STDERR '(no file)';
     return;
   }
-
-  # say STDERR "files in archive/$dir";
 
   # ファイルリスト表示
   if ( $options->{f_list} ) {
@@ -161,8 +176,94 @@ sub upload {
   # ディレクトリエラーチェック
   die "Invalid dir: $dir\n" if $res->content =~ /invalid dir\($dir\)/;
 
-  # リスト出力
+  # ファイル一覧出力
   my @files = $res->content =~ /uploaded '(.*?)'/g;
   say "uploaded the files to archive/$dir";
   say join "\n", (map { "- $_"  } @files);
+};
+
+
+sub download {
+  my ($path, $options) = @_;
+
+  my $dir      = path($path)->parent->stringify;
+  my $filename = path($path)->basename;
+
+  # HTTP リクエストを作って投げる
+  my $req = HTTP::Request->new(
+    GET => "${URL}?D=archives&dir=${dir}&act_download=1&filename=${filename}"
+  );
+  $req->authorization_basic($USER, $PASS);
+  my $ua = LWP::UserAgent->new();
+  my $res = $ua->request($req);
+
+  # レスポンスチェック
+  die "no response from server\n" if not defined $res;
+  die $res->content if $res->content =~ /Can't connect to/;
+
+  # HTTP のレスポンスを表示 (-v)
+  say $res->content if $options->{f_verbose};
+
+  # ディレクトリエラーチェック
+  die "Invalid dir: $dir\n" if $res->content =~ /invalid dir\($dir\)/;
+
+  # 出力
+  $filename = $options->{output} if $options->{output};
+  path($filename)->spew($res->content);
+  say 'saved ' . path($filename)->absolute->stringify;
+};
+
+
+sub download_zip {
+  my ($dir, $options) = @_;
+  $dir =~ s|/$||;                  # パスの最後に / があると空のファイルが返ってくる
+
+  # POST メソッドで送る content
+  my $content = [
+    D                => 'archives',
+    dir              => $dir,
+    act_download_zip => 'download all in zip',
+  ];
+
+  # HTTP リクエストを作って投げる
+  my $req = POST(
+    "${URL}?D=archives&dir=${dir}",
+    Content_Type => 'application/x-www-form-urlencoded',
+    Content      => $content
+  );
+
+  # 認証情報をつける
+  $req->authorization_basic($USER, $PASS);
+  my $ua = LWP::UserAgent->new();
+  my $res = $ua->request($req);
+
+  # レスポンスチェック
+  die "no response from server\n" if not defined $res;
+
+  # アクセスチェック
+  die $res->content if $res->content =~ /Can't connect to/;
+
+  # 認証チェック
+  die $res->content if $res->content =~ /このページを見るのには許可が必要です/;
+
+  # HTTP のレスポンスを表示 (-v)
+  say $res->content if $options->{f_verbose};
+
+  # ディレクトリエラーチェック
+  die "Invalid dir: $dir\n" if $res->content =~ /invalid dir\($dir\)/;
+
+  # 出力パスの決定
+  my $path;
+  if ( $options->{output} ) {
+    $path = path($options->{output}); # 出力ファイル名の指定があればそれを使う
+  }
+  else {
+    my $t = localtime;                  # Time::Piece オブジェクト
+    my $filename = $dir=~ s|/|_|gr;     # ファイル名に / は使えないので _ に置換
+    $path = path($t->date . "_archive_${filename}.zip");
+  }
+
+  # ファイル出力
+  $path->spew($res->content);
+  say 'saved ' . path($path)->absolute->stringify;
 };
