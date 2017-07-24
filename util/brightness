@@ -1,0 +1,73 @@
+#!/usr/bin/env perl
+use v5.24;
+use warnings;
+use FindBin;
+use Path::Tiny;
+use Getopt::Kingpin;
+
+# parse command line
+my $kingpin = Getopt::Kingpin->new();
+my $set     = $kingpin->flag('set', 'set       brightness')->short('s')->int;
+my $inc     = $kingpin->flag('inc', 'increment brightness')->short('i')->int;
+my $dec     = $kingpin->flag('dec', 'decrement brightness')->short('d')->int;
+$kingpin->parse;
+
+my $PREFIX="/sys/class/backlight/intel_backlight";
+# my $PREFIX="/tmp";
+
+
+# main
+sub {
+
+  # 輝度設定ファイルチェック
+  if ( not -f "${PREFIX}/max_brightness" || not -f "${PREFIX}/brightness" ) {
+    die "[error] \$PREFIX($PREFIX) is wrong.";
+  }
+
+  # オプションチェック
+  if ( ($set ? 1 : 0) + ($inc ? 1 : 0) + ($dec ? 1 : 0) != 1 ) {
+    usage();
+    exit 1;
+  }
+
+  # この時点でいずれか 1 つのオプションに整数値が入っていることが保証されている
+
+
+  # 輝度の計算
+  my $MAX_VALUE = path("${PREFIX}/max_brightness")->slurp();
+  my $MIN_VALUE = int($MAX_VALUE * 0.2 + 0.999);
+  my $brightness;
+
+  if ( $set ) {
+    if ( $set < 20 || 100 < $set ) {
+      die "[error] the argument of --set must be in 20 - 100";
+    }
+    $brightness = $MAX_VALUE * $set / 100;
+  }
+  elsif ( $inc ) {
+    $brightness = path("${PREFIX}/brightness")->slurp();
+    $brightness += ($MAX_VALUE * $inc / 100);
+  }
+  elsif ( $dec ) {
+    $brightness = path("${PREFIX}/brightness")->slurp();
+    $brightness -= ($MAX_VALUE * $dec / 100);
+  }
+
+  # 20 - 100 % に調整
+  $brightness = $brightness > $MAX_VALUE ? $MAX_VALUE
+              : $brightness < $MIN_VALUE ? $MIN_VALUE
+              :                            $brightness;
+
+  $brightness = int($brightness);
+
+  say "brightness : " . int(100 * $brightness / $MAX_VALUE) . "% ($brightness)";
+  # path("${PREFIX}/brightness")->spew($brightness);
+
+  system "echo $brightness | sudo tee ${PREFIX}/brightness > /dev/null";
+}->();
+
+
+sub usage {
+  system "$FindBin::Bin/$FindBin::Script --help";
+  exit;
+}
