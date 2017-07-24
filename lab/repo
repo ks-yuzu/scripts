@@ -2,13 +2,28 @@
 use v5.24;
 use warnings;
 
-my $date = shift // qx/date --iso-8601/;
-chomp $date;
-my $file = $date . "-hls-oosako.org";
+use Getopt::Kingpin;
 
-system <<EOF;
+my $kingpin = Getopt::Kingpin->new();
+my $f_upload = $kingpin->flag('upload', 'upload to archive')->short('u')->bool;
+my $date     = $kingpin->arg('date', '')->default(qx/date --iso-8601 | perl -pe 's|\n||'/);
+
+$kingpin->parse;
+
+
+if ( $f_upload ) {
+  my $file = $date . "-hls-oosako.pdf";
+  system <<EOF;
+cd ~/works/lab/report
+archive.pl HLS/LATEST/ -u $file
+EOF
+}
+else {
+  my $file = $date . "-hls-oosako.org";
+
+  system <<EOF;
 cd ~/works/lab/report
 emacsclient -n $file
 EOF
 
-
+}
