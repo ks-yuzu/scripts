@@ -15,7 +15,7 @@ use MyPassword::Archive; # ID, PW
 
 
 # constant
-my $URL = 'http://ist.ksc.kwansei.ac.jp/~ishiura/cgi-bin/webfiler/lab/main.cgi';
+my $URL = 'https://ist.ksc.kwansei.ac.jp/~ishiura/cgi-bin/webfiler/lab/main.cgi';
 my $USER = MyPassword::Archive::USER;
 my $PASS = MyPassword::Archive::PASS;
 

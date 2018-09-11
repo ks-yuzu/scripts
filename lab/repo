@@ -4,26 +4,46 @@ use warnings;
 
 use Getopt::Kingpin;
 
+my $REPORT_DIR = '~/works/lab/report';
+
 my $kingpin = Getopt::Kingpin->new();
+# select using peco
+my $f_peco   = $kingpin->flag('peco',   'select file using peco')->short('p')->bool;
+# action
+my $f_edit   = $kingpin->flag('edit',   'edit the specified org file')->short('e')->bool;
 my $f_upload = $kingpin->flag('upload', 'upload to archive')->short('u')->bool;
+my $f_open   = $kingpin->flag('open',   'open the generated pdf with evince')->short('o')->bool;
 my $date     = $kingpin->arg('date', '')->default(qx/date --iso-8601 | perl -pe 's|\n||'/);
 
 $kingpin->parse;
 
 
+# upload or edit
 if ( $f_upload ) {
-  my $file = $date . "-hls-oosako.pdf";
-  system <<EOF;
-cd ~/works/lab/report
-archive.pl HLS/LATEST/ -u $file
-EOF
+  my $suffix = 'pdf';
+  my $file = $f_peco ? select_files_using_peco("\.$suffix")
+                     : "${date}-hls-oosako.${suffix}";
+
+  system "cd $REPORT_DIR; archive.pl HLS/LATEST/ -u $file";
+}
+elsif ( $f_open ) {
+  my $suffix = 'pdf';
+  my $file = $f_peco ? select_files_using_peco("\.$suffix")
+                     : "${date}-hls-oosako.${suffix}";
+
+  system "cd $REPORT_DIR; evince $file";
 }
 else {
-  my $file = $date . "-hls-oosako.org";
+  my $suffix = 'org';
+  my $file = $f_peco ? select_files_using_peco("\.$suffix")
+                     : "${date}-hls-oosako.${suffix}";
 
-  system <<EOF;
-cd ~/works/lab/report
-emacsclient -n $file
-EOF
+  system "cd $REPORT_DIR; emacsclient -n $file";
+}
 
+
+sub select_files_using_peco {
+  my $regex = shift // die 'internal error';
+
+  return qx/ls -r ${REPORT_DIR} | grep -P $regex | peco/;
 }
