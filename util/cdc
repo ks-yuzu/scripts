@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+if [ -z $1 ]; then
+    TARGET=$HOME
+else
+    TARGET=$1
+fi
+
+
+
+BEGIN="[<]<'__perl_script__'"
+END="^__perl_script__"
+FULLPATH=$(perl <(sed -n "/$BEGIN/,/$END/{/$BEGIN/d;/$END/d;p}" $0) $TARGET)
+
+cd $FULLPATH
+
+:<<'__perl_script__'
+#!/usr/bin/env perl
+use v5.24;
+use warnings;
+use Path::Tiny;
+
+my $relative_path = shift;
+my $real_path = path($relative_path)->realpath();
+
+print $real_path;
+__perl_script__

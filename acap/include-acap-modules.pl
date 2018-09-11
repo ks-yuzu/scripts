@@ -12,16 +12,17 @@ my $module_all       = $kingpin->flag('all'      , 'include from all modules'   
 $kingpin->parse;
 
 use Path::Tiny;
+
 if ($module_acap      || $module_all) {
-  chomp, path($_)->copy('.') for qx!find ~/tools/ccap/modules       -name '*.v' | peco!
+  chomp, path($_)->copy('.') for qx!find \${ACAP_DIR}/modules       -name '*.v' | peco!
 }
 
 if ($module_mipslite  || $module_all) {
-  chomp, path($_)->copy('.') for qx!find ~/tools/mipslite           -name '*.v' | peco!
+  chomp, path($_)->copy('.') for qx!find \${MIPSLITE_DIR}           -name '*.v' | peco!
 }
 
 if ($module_testbench || $module_all) {
-  chomp, path($_)->copy('.') for qx!find ~/tools/mipslite/testbench -name '*.v' | peco!
+  chomp, path($_)->copy('.') for qx!find \${MIPSLITE_DIR}/testbench -name '*.v' | peco!
 }
 
 

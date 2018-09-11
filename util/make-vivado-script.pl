@@ -116,7 +116,8 @@ sub make_synth_script {
   my @tcl = ();
   push @tcl, "read_verilog " . (join ' ', @design_files) . "\n";
   push @tcl, "synth_design -top ${top_module} -part ${target}\n";
-  push @tcl, "report_utilization    -file report_utilization.txt\n";
+  push @tcl, "report_utilization               -file report_utilization.txt\n";
+  push @tcl, "report_utilization -hierarchical -file report_utilization-hierarchical.txt\n";
   push @tcl, "report_timing_summary -file report_timing.txt -report_unconstrained\n";
   path("${synth_script_name}.tcl")->spew(@tcl);
 

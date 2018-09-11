@@ -1,0 +1,34 @@
+#!/usr/bin/env perl
+use v5.24;
+use warnings;
+use diagnostics;
+
+use utf8;
+use open IO => qw/:encoding(UTF-8) :std/;
+
+use HTTP::Request::Common;
+use LWP::UserAgent;
+
+# use JSON::XS;
+
+use Getopt::Kingpin;
+
+
+my $kingpin = Getopt::Kingpin->new();
+my $param = $kingpin->flag('param', 'parameter')->short('p')->string;
+my $url   = $kingpin->arg('URL', ' a list of arguments')->string;
+$kingpin->parse;
+
+# my $param_json = encode_json(eval $param->value);
+
+$url = $url->value;
+if ( $url !~ m|^https?://| ) {
+  $url = 'http://' . $url;
+}
+
+my $req = POST( $url, eval $param->value );
+
+my $res = LWP::UserAgent->new->request($req);
+
+say $res->as_string;
+

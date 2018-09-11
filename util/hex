@@ -1,0 +1,9 @@
+#!/usr/bin/env perl
+use v5.26;
+use warnings;
+use diagnostics;
+
+use utf8;
+use open IO => qw/:encoding(UTF-8) :std/;
+
+printf "0x%X", (eval shift);

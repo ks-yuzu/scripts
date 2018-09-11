@@ -3,4 +3,13 @@ set -euo pipefail
 
 FILE=$1
 
-emacs -l ~/.emacs.d/inits/setting-org-mode.el --batch $FILE --eval="(org-latex-export-to-latex)"
+emacs $FILE                                 \
+      --batch                               \
+      --directory "$HOME/.emacs.d/inits/"   \
+      --load 'setting-lab-org.el'           \
+      --eval="(org-latex-export-to-latex)"
+
+# --batch     : バッチモードで実行
+# --directory : 設定ファイルのディレクトリ指定
+# --load      : 研究室フォーマット用の設定ファイルを読み込み
+# --eval=     : 生成コマンドの指定

@@ -1,0 +1,12 @@
+#!/usr/bin/env perl
+use v5.24;
+use warnings;
+use diagnostics;
+
+use utf8;
+use open IO => qw/:encoding(UTF-8) :std/;
+
+use String::Random qw/random_regex/;
+
+my $regex = shift;
+say random_regex($regex);

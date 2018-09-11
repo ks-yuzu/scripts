@@ -1,0 +1,12 @@
+#!/usr/bin/env perl
+use v5.26;
+use warnings;
+use diagnostics;
+
+use utf8;
+use open IO => qw/:encoding(UTF-8) :std/;
+
+my $hex_value = shift;
+$hex_value = "0x${hex_value}" unless $hex_value =~ /^0x/;
+
+print (eval $hex_value);

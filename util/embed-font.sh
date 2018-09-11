@@ -9,7 +9,7 @@ if [ ! -f ${infile} ]; then
     exit 1
 fi
 
-# enbed fonts
+# embed fonts
 echo "Generating a pdf file with all fonts"
 gs -q -dNOPAUSE -dBATCH -dPDFSETTINGS=/prepress -sDEVICE=pdfwrite -sOutputFile=${outfile} ${infile}
 
