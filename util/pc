@@ -1,10 +1,28 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env perl
+use v5.26;
+use warnings;
 
-if type perl6 > /dev/null 2>&1; then
-    perl6 -e "say ($*)"
-else
-    perl -E "print ($*)"
-fi
+use utf8;
+use open IO => qw/:encoding(UTF-8) :std/;
+
+use Getopt::Kingpin;
+
+my $kingpin = Getopt::Kingpin->new();
+my $opt_5 = $kingpin->flag('5', 'use perl 5')->short('5')->default(0)->bool;
+my $opt_6 = $kingpin->flag('6', 'use perl 6')->short('6')->default(0)->bool;
+my $args_obj = $kingpin->arg('args', ' a list of arguments')->string_list;
+
+$kingpin->parse;
+
+my $args = join ' ', $args_obj->value->@*;
+
+if ( $opt_6
+     or (! $opt_5 and ! system 'which perl6 > /dev/null 2>&1')
+   ) {
+  system qq/perl6 -e "print ($args)"/
+}
+else {
+  system qq/perl -E "print ($args)"/
+}
 
 
