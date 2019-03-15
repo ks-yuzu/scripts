@@ -3,11 +3,10 @@ use v5.24;
 use warnings;
 use diagnostics;
 
-use Path::Class;
-
+use Path::Tiny;
 use Getopt::Kingpin;
 
-# parse option
+# option
 my $kingpin  = Getopt::Kingpin->new();
 my $f_detail = $kingpin->flag('detail', 'detail')->short('d')->bool;
 my $f_edit   = $kingpin->flag('edit', 'edit')->short('e')->bool;
@@ -24,8 +23,8 @@ if ( $f_edit ) {
 }
 
 # read todo-file
-my @lines = (file $filepath)->slurp(chomp => 0);
+my @lines = path($filepath)->lines( {chomp => 0} );
 
 say $f_detail ?
-  grep {s/(^[^\*].*)/  $1/g, $_} @lines :
+  map  { m/^[^\*]/ ? "  $_" : $_ } @lines :
   grep { m/^\*/ } @lines;
