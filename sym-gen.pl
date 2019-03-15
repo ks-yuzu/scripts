@@ -11,8 +11,8 @@ for my $file ( @files ) {
   chomp $file;
   next if $file =~ m!/.git/!;
 
-  my $res = qx(ln -s $file ~/bin 2>&1);
+  my $res = qx(ln -s $file \$HOME/bin 2>&1);
 
-  $res !~ /File exists/ and say "create symbolic link '/home/yuzu/bin/" . basename($file) . "'";
+  $res !~ /File exists/ and say "create symbolic link '\$HOME/bin/" . basename($file) . "'";
 }
 
