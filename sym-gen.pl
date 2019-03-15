@@ -1,4 +1,9 @@
 #!/usr/bin/env perl
+
+# このディレクトリ以下のファイルへのシンボリックリンクを
+# $HOMT/bin 等のパスの通ったディレクトリに自動的に生成するスクリプト
+# (不足しているものを探して作成する)
+
 use v5.24;
 use warnings;
 use diagnostics;
