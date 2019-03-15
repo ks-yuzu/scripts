@@ -1,0 +1,51 @@
+#!/usr/bin/env perl
+use v5.24;
+use warnings;
+use diagnostics;
+
+use lib "$ENV{HOME}/works/lab/lib/perl";
+use ACAP::ParseRtl;
+
+use Getopt::Kingpin;
+use Data::Printer { deparse => 1, caller_info => 1 };
+
+my $states_data = undef;
+
+sub {
+  my $kingpin = Getopt::Kingpin->new();
+  my $opt_head   = $kingpin->flag('head', 'show the beginning state of DFG')->default(0)->bool;
+  my $arg_states = $kingpin->arg('states', 'list of states to show the info')->string_list;
+
+  $kingpin->parse;
+  my @states = @{$arg_states->value()};
+
+  my $rtl = ACAP::ParseRtl->new({});
+  $states_data = $rtl->states();
+
+  if ( @states ) {
+    for my $state ( @states ) {
+      $state = find_beginning_of_dfg($state) if $opt_head; # 表示を DFG の先頭 state にする
+
+      if ( defined $state ) { show_info($state); }
+      else                  { say 'not found the beginning of dfg'; }
+    }
+  } else {
+    # JSON で全て出力
+    say encode_json( $states_data );
+  }
+}->(@ARGV);
+
+sub show_info {
+  my ($state) = @_;
+  p $states_data->{$state};
+}
+
+sub find_beginning_of_dfg {
+  my ($state) = @_;
+  while ( $states_data->{$state}->{dfg_begin} !~ /^\d+$/ ) {
+    $state--;
+    return undef if $state <= 0;
+  }
+
+  return $state;
+}

@@ -1,0 +1,241 @@
+#!/usr/bin/env perl
+use v5.26;
+use warnings;
+
+use utf8;
+use open IO => qw/:encoding(UTF-8) :std/;
+
+use Path::Tiny;
+use Test2::V0;
+
+use DDP;
+
+
+# main
+sub {
+  my $main_tex_filename = shift;
+
+  my $tex_files = load_tex_files(undef, $main_tex_filename);
+
+  check_ng_pattern($tex_files);
+  check_bib_order($tex_files);
+  # check_ref($tex_files);
+
+  done_testing();
+}->(@ARGV);
+
+
+# ==================== ファイル読み込み ====================
+sub load_tex_files {
+  my ($tex_files, $tex_filename) = @_;
+  $tex_files //= [];                    # undef なら空の配列リファレンスに
+
+  my $content = [path($tex_filename)->lines({chomp => 1})];
+
+  # \input で読み込まれる tex ファイル名を抽出
+  my $input_files = list_input_files($content);
+  push @$tex_files, {
+    filename => $tex_filename,
+    content  => $content,
+    input    => $input_files,
+  };
+
+  # \input のファイルを再帰的に読み込み
+  for my $input_file ( @$input_files ) {
+    my $line     = $input_file->{line};
+    my $filename = $input_file->{filename};
+
+    # diag "$tex_filename:$line: load input file '$filename'";
+    load_tex_files($tex_files, $filename)
+  }
+
+  extract_cites($tex_files);
+  return $tex_files;
+}
+
+
+sub list_input_files {
+  my $tex = shift;
+
+  # 配列リファレンスで返す
+  return [
+    map {
+      $tex->[$_] =~ /\\input\{(.*?)}/
+        ? {line => ($_+1), filename => $1}
+        : ()
+    } 0 .. $#$tex
+  ];
+}
+
+
+# 文献の参照箇所を抽出して $tex_files 内に保存する
+sub extract_cites {
+  my $tex_files = shift;
+  while ( my ($idx, $tex_file) = each @$tex_files ) {
+    my $tex_content =$tex_file->{content};
+    my @cites;
+
+    for my $idx ( 0 .. $#$tex_content ) {
+      my $line = $idx + 1;
+
+      my $line_content = ($tex_content->[$idx] =~ s/%.*$//r); # コメントを除外
+
+      while ( $line_content =~ /\\cite\{(.*?)}/g ) {
+        push @cites, map { {line => $line, identifier => $_ } } split ',', $1
+      }
+    }
+    $tex_files->[$idx]->{cites} = \@cites;
+  }
+}
+
+
+# ==================== 文字列パターンチェック ====================
+sub check_ng_pattern {
+  my $tex_files = shift;
+
+  # 正規表現でパターンを列挙
+  # TODO: 設定として抜き出す
+  my @ng_patterns = (
+    { pattern => '"'       , exclude_file => [] },
+    { pattern => 'ことで'  , exclude_file => [] },
+    { pattern => 'といった', exclude_file => [] },
+    { pattern => '。'      , exclude_file => [] },
+    { pattern => '、'      , exclude_file => [] },
+    { pattern => '．'      , exclude_file => [] },
+    { pattern => '，'      , exclude_file => [] },
+    { pattern => '　'      , exclude_file => [] },
+    { pattern => '・'      , exclude_file => [] },
+    { pattern => 'です'    , exclude_file => [] },
+    { pattern => 'ます'    , exclude_file => [qr/acknowledgement.*\.tex/] },
+    { pattern => '及び'    , exclude_file => [] },
+    { pattern => '更に'    , exclude_file => [] }, # TODO: 表記揺れチェックにすべき
+    { pattern => 'など'    , exclude_file => [] },
+    { pattern => '\(\('    , exclude_file => [] },
+    { pattern => '言える'  , exclude_file => [] },
+    { pattern => 'り\.'    , exclude_file => [] },
+    { pattern => 'る,'     , exclude_file => [] },
+    { pattern => 'TODO'    , exclude_file => [] },
+    { pattern => 'HW'      , exclude_file => [] },
+    { pattern => 'SW'      , exclude_file => [] },
+  );
+
+  subtest '文字列パターンのチェック' => sub {
+    for my $tex_file ( @$tex_files ) {
+      my $tex_filename = $tex_file->{filename};
+      my $tex_content  = $tex_file->{content};
+
+      subtest $tex_filename => sub {
+        PATTERN: for my $pattern_data ( @ng_patterns ) {
+          my $pattern = $pattern_data->{pattern};
+
+          for my $exclude ( @{ $pattern_data->{exclude_file} } ) {
+            if ( $tex_filename =~ $exclude ) {
+              # diag "$tex_filename is excluded from checking '$pattern'";
+              next PATTERN;
+            }
+          }
+
+          # パターンを探して, 見付かったものを行番号とセットで返す
+          my @matched = map {
+            my $line = $_ + 1;
+            ($tex_content->[$_] =~ /^[^%]*$pattern/)
+              ? ("$tex_filename:$line: " . $tex_content->[$_])
+              : ()
+            } 0..$#$tex_content;
+
+          # 結果表示
+          is \@matched, [], "$pattern";
+        }
+      }
+
+    }
+  };
+}
+
+
+# ==================== 文献チェック ====================
+sub check_bib_order {
+  my $tex_files = shift;
+  my $cites = get_cite_list($tex_files);
+
+  my $bibs = get_bib_list($tex_files); # 文献リスト. 出現で shift される
+  is [map {$_->{identifier}} @$bibs], [map {$_->{identifier}} @$cites]
+    or diag join "\n", map {
+      (sprintf "%-20s", $_->{identifier} ) . ': ' . $_->{filename}.':'.$_->{line}
+    } @$cites;               # fail した時だけ, 文献の出現順を表示する
+}
+
+
+sub get_cite_list {
+  my ($tex_files, $target_tex_id) = @_;
+
+  state $appeared_bibs = [];                     # 既に文章中に出た文献
+
+  $target_tex_id //= 0; # 指定がなければ main からスタート
+  my $target_tex_file = $tex_files->[$target_tex_id];
+
+  my @cites  = @{ $target_tex_file->{cites} };
+  my @inputs = @{ $target_tex_file->{input} };
+
+  while ( @cites or @inputs ) {
+    my $next_cite  = $cites[0];
+    my $next_input = $inputs[0];
+
+    if (
+      ! @cites                      # cite がもう無い場合
+      || @inputs && $next_cite->{line} > $next_input->{line} # 次の cite より input が先の時
+    ) {
+      my ($new_target_tex_id) = grep {
+        $next_input->{filename} eq $tex_files->[$_]->{filename}
+      } 0 .. $#$tex_files;
+
+      get_cite_list($tex_files, $new_target_tex_id);
+
+      shift @inputs;                  # input したファイルを処理したらリストから除外
+    }
+    # 既に文章中に出た文献ならスキップ
+    elsif ( grep { $_ eq $next_cite->{identifier} } map {$_->{identifier}} @$appeared_bibs ) {
+      shift @cites;
+    }
+    else {
+      $next_cite->{filename} = $target_tex_file->{filename};
+      push @$appeared_bibs, $next_cite;
+      shift @cites;
+    }
+  }
+
+  return $appeared_bibs;
+}
+
+
+sub get_bib_list {
+  my $tex_files = shift;
+
+  my @all_bibs;
+  for my $tex_file ( @$tex_files ) {
+    my $tex_filename = $tex_file->{filename};
+    my $tex_content  = $tex_file->{content};
+
+    my @bibs = map {
+      my $line = $_ + 1;
+      $tex_content->[$_] =~ /^[^%]*bibitem\{(.*?)}/
+        ? {
+          line       => $line,
+          identifier => ($1 // 'identifier is not found in the same line'),
+          filename   => $tex_filename
+        }
+        : ()
+    } 0 .. $#$tex_content;
+
+    push @all_bibs, @bibs;
+  }
+
+  return \@all_bibs;
+}
+
+
+# ==================== 図などの ref チェック ====================
+sub check_ref {
+  ...
+}
+

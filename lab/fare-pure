@@ -1,0 +1,258 @@
+#!/usr/bin/env perl
+use v5.24;
+use warnings;
+use diagnostics;
+use Time::Local;
+use File::Path 'mkpath';
+
+use Getopt::Kingpin;
+use Path::Tiny;
+
+
+# [ 使い方 ]
+# 1. 保存先のディレクトリを $path に指定
+# 2. __DATA__ 以下のテンプレートを編集
+# 3. org2tex を用意 (emacs のワンライナーで OK)
+# 4. tex2pdf を用意 (platex -> dvipdfmx で OK)
+
+
+# 定数
+# my $path = "$ENV{HOME}/works/lab/fare/";
+my $path = "/tmp";
+
+
+# コマンドラインのパース
+my $kingpin = Getopt::Kingpin->new();
+my $subject     = $kingpin->flag('subject',    'subject'    )->string->default('astem');
+my $submit_date = $kingpin->flag('submit',     'submit date')->string;
+my $travel_date = $kingpin->arg('travel date', 'travel date')->string->required;
+$kingpin->parse;
+
+
+# 今日の日付 (デフォルト値として使用) を取得
+my $today = get_today();
+
+
+# 期日
+$travel_date =~ /(?<t_year>\d{4})?-?(?<t_month>\d{1,2})?-?(?<t_day>\d{1,2})/
+  or die "[error] the format of travel date is invalid";
+
+my $travel_year  = sprintf "%02d", ($+{t_year}  // $today->{year});
+my $travel_month = sprintf "%02d", ($+{t_month} // $today->{month});
+my $travel_day   = sprintf "%02d", ($+{t_day}   // die "[error] travel day may not be specified");
+my $travel_dow   = get_dow($travel_year, $travel_month, $travel_day);
+
+
+# 提出日
+$submit_date =~ /(?<s_year>\d{4})?-?(?<s_month>\d{1,2})?-?(?<s_day>\d{1,2})/;
+
+my $submit_year  = sprintf "%02d", ($+{s_year}  // $today->{year} );
+my $submit_month = sprintf "%02d", ($+{s_month} // $today->{month});
+my $submit_day   = sprintf "%02d", ($+{s_day}   // $today->{day}  );
+my $submit_dow   = get_dow($submit_year, $submit_month, $submit_day);
+
+
+# 生成するファイル名
+my $basename = "$subject-${travel_year}${travel_month}${travel_day}";
+
+
+# 生成先ディレクトリへ移動. なければ生成
+if ( not -d $path ) {
+  mkpath $path, {chmod => 0775};
+}
+chdir $path;
+
+
+# org に日付を入れる
+my @org = <DATA>;
+my $travel_date_line = shift @{[ grep { $org[$_] =~ /yyyy.*mm.*dd.*dow/ } 0 .. $#org ]};
+$org[$travel_date_line] =~ s/yyyy年/${travel_year}年/;
+$org[$travel_date_line] =~ s/mm月/${travel_month}月/;
+$org[$travel_date_line] =~ s/dd日/${travel_day}日/;
+$org[$travel_date_line] =~ s/\(dow\)/(${travel_dow})/;
+
+my $submit_date_line = shift @{[ grep { $org[$_] =~ /YYYY.*MM.*DD.*DOW/ } 0 .. $#org ]};
+$org[$submit_date_line] =~ s/YYYY年/${submit_year}年/;
+$org[$submit_date_line] =~ s/MM月/${submit_month}月/;
+$org[$submit_date_line] =~ s/DD日/${submit_day}日/;
+$org[$submit_date_line] =~ s/\(DOW\)/(${submit_dow})/;
+
+
+# org 生成
+path("${basename}.org")->spew(@org);
+
+
+# org から tex を生成する elisp を出力
+make_elisp_file();
+
+
+# シェルコマンド
+my $cmd = <<'SCRIPT_END';
+set -euo pipefail
+
+emacs $basename.org                         \
+      --batch                               \
+      --directory "/tmp/elisp/"             \
+      --load 'setting-lab-org.el'           \
+      --eval="(org-latex-export-to-latex)"
+
+platex $basename.tex                  # tex -> dvi
+platex $basename.tex                  # 2nd for \ref and \cite
+dvipdfmx $basename.dvi 2> /dev/null   # dvi -> pdf
+evince $basename.pdf > /dev/null      # open pdf
+rm $basename.dvi
+rm $basename.aux
+rm $basename.log
+SCRIPT_END
+
+
+$cmd =~ s/\$basename/$basename/g;
+
+system qq/bash -c $cmd/;
+
+
+sub make_elisp_file {
+  my $elisp = <<EOF;
+(require 'org)
+
+(setq org-export-latex-coding-system 'utf-8)
+(setq org-export-latex-date-format "%Y-%m-%d")
+(setq org-export-latex-classes nil)
+
+(setq org-latex-classes '(("jsarticle"
+                           "\\documentclass{jsarticle}
+\\usepackage[dvipdfmx]{graphicx}
+\\usepackage{url}
+\\usepackage{atbegshi}
+\\AtBeginShipoutFirst{\\special{pdf:tounicode EUC-UCS2}}
+\\usepackage[dvipdfmx,setpagesize=false]{hyperref}
+ [NO-DEFAULT-PACKAGES]
+ [PACKAGES]
+ [EXTRA]"
+            ("\\section{%s}" . "\\section*{%s}")
+            ("\\subsection{%s}" . "\\subsection*{%s}")
+            ("\\subsubsection{%s}" . "\\subsubsection*{%s}")
+            ("\\paragraph{%s}" . "\\paragraph*{%s}")
+            ("\\subparagraph{%s}" . "\\subparagraph*{%s}"))))
+
+(setq org-latex-default-class "jsarticle")
+
+(org-latex-export-to-latex)
+EOF
+
+  path('/tmp/elisp/')->mkpath();
+  path('/tmp/elisp/setting-lab-org.el')->spew($elisp);
+}
+
+
+# 今日の日付を求める
+sub get_today {
+  my %today;
+  @today{('day', 'month', 'year')} = (localtime(time))[3..5];
+  $today{year}  += 1900;
+  $today{month} += 1;
+
+  return \%today;
+}
+
+
+# 曜日を求める
+sub get_dow {
+  my ($year, $month, $day) = @_;
+  my $dow = (localtime( timelocal(0, 0, 0, $day, $month - 1, $year) ))[6];
+  return ("日","月","火","水","木","金","土")[$dow];
+}
+
+
+__DATA__
+#+LATEX_HEADER: \renewcommand \maketitle{}
+
+#+LANGUAGE: ja
+#+OPTIONS: toc:nil timestamp:nil creator:nil f:nil ^:{}
+#+LATEX_CLASS: jsarticle
+#+LATEX_CLASS_OPTIONS: [a4paper, 11pt]
+#+LATEX_HEADER: \usepackage{boites}
+
+# ---------- package setting ----------
+#+LATEX_HEADER: \usepackage{txfonts}
+#+LATEX_HEADER: \usepackage{bm}
+#+LATEX_HEADER: \usepackage{boxedminipage}
+#+LATEX_HEADER: \usepackage{multicol}
+
+# ---------- margin setting ----------
+#+LATEX_HEADER: \setlength{\topmargin}{-10mm}
+#+LATEX_HEADER: \setlength{\oddsidemargin}{-5mm}
+#+LATEX_HEADER: \setlength{\textwidth}{180mm}
+#+LATEX_HEADER: \setlength{\textheight}{260mm}
+
+
+#+BEGIN_EXPORT latex
+\makeatletter
+\def\section{\@startsection{section}{1}{\z@}%
+{1.75ex plus 0.5ex minus .2ex}{0.75ex plus .2ex}{\normalsize\bf}}
+\def\subsection{\@startsection{subsection}{2}{\z@}%
+{1.5ex plus 0.5ex minus .2ex}{0.5ex plus .2ex}{\normalsize\bf}}
+\def\subsection{\@startsection{subsection}{3}{\z@}%
+{1.0ex plus 0.5ex minus .2ex}{0.5ex plus .2ex}{\normalsize\bf}}
+\makeatother
+\renewcommand{\baselinestretch}{0.85}
+#+END_EXPORT
+
+#+BEGIN_EXPORT latex
+\begin{flushleft}
+  \Large{ \textbf{研究打ち合わせ 交通費明細} }
+\end{flushleft}
+#+END_EXPORT
+
+#+ATTR_LaTeX: :align p{12em}p{46em}
+|               |                                                       |
+| 1. 期日       | yyyy年mm月dd日 (dow)                                    |
+|               |                                                       |
+|               |                                                       |
+| 2. 場所       | (財) 京都高度技術研究所                               |
+|               | 〒600-8813                                            |
+|               | 京都市下京区中堂寺南町１３４                          |
+|               |                                                       |
+| 3. 内容       | VLSI の動作合成システムの開発に関する研究の打ち合わせ |
+|               |                                                       |
+|               |                                                       |
+| 4. 交通費明細 |                                                       |
+
+\vspace{0.3em}
+
+#+BEGIN_EXPORT latex
+\newcommand{\cc}{\multicolumn{1}{c|}} 
+\newcommand{\rc}{\multicolumn{1}{r|}} 
+#+END_EXPORT
+
+#+ATTR_LaTeX: :align |p{23em}|p{6.5em}|p{6.5em}|
+|---------------+---------+---------------|
+| 大阪 → 丹波口 | \cc{JR} | \rc{840 円}   |
+|---------------+---------+---------------|
+| 丹波口 → 大阪 | \cc{JR} | \rc{840 円}   |
+|---------------+---------+---------------|
+|               |         |               |
+|---------------+---------+---------------|
+|               |         |               |
+|---------------+---------+---------------|
+|               |         |               |
+|---------------+---------+---------------|
+|               |         |               |
+|---------------+---------+---------------|
+|               |         |               |
+|---------------+---------+---------------|
+|               |         | \rc{1,680 円} |
+|---------------+---------+---------------|
+
+
+\vspace{5em}
+
+上記のとおり領収いたしました。
+
+\vspace{2em}
+
+#+ATTR_LaTeX: :align p{22em}p{6em}p{22em}
+|   | 理工学研究科 | 情報科学専攻　M2        |
+|   |              | 大迫 裕樹　　　　　　印 |
+|   |              |                         |
+|   |              | YYYY年MM月DD日 (DOW)        |

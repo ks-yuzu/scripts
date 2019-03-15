@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+
+function get_settings {
+    cat <<'EOF'
+
+
+(setq org-latex-classes '(('jsarticle'
+                        '\\documentclass{jsarticle}
+\\usepackage[dvipdfmx]{graphicx}
+\\usepackage{url}
+\\usepackage{atbegshi}
+\\AtBeginShipoutFirst{\\special{pdf:tounicode EUC-UCS2}}
+\\usepackage[dvipdfmx,setpagesize=false]{hyperref}
+ [NO-DEFAULT-PACKAGES]
+ [PACKAGES]
+ [EXTRA]"
+            ("\\section{%s}" . "\\section*{%s}")
+            ("\\subsection{%s}" . "\\subsection*{%s}")
+            ("\\subsubsection{%s}" . "\\subsubsection*{%s}")
+            ("\\paragraph{%s}" . "\\paragraph*{%s}")
+            ("\\subparagraph{%s}" . "\\subparagraph*{%s}"))))
+EOF
+}
+
+FILE=$1
+
+settings=$(get_settings)
+
+echo -e $settings
+
+emacs $FILE                              \
+      --batch                            \
+      --eval="(require 'org)(setq org-export-latex-coding-system 'utf-8)(setq org-export-latex-date-format '%Y-%m-%d')(setq org-export-latex-classes nil)(setq org-latex-default-class 'jsarticle')(org-latex-export-to-latex)"
+
+
+
+# --batch     : バッチモードで実行
+# --directory : 設定ファイルのディレクトリ指定
+# --load      : 研究室フォーマット用の設定ファイルを読み込み
+# --eval=     : 生成コマンドの指定

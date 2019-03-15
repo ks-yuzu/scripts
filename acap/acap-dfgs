@@ -1,0 +1,20 @@
+#!/usr/bin/env perl
+use v5.24;
+use warnings;
+use diagnostics;
+
+use lib "$ENV{HOME}/works/lab/lib/perl";
+use ACAP::ParseLow;
+
+use DDP;
+
+my $dfg_id = shift;
+
+my $low = ACAP::ParseLow->new({});
+
+if ( defined $dfg_id ) {
+  p $low->dfgs->{$dfg_id}
+}
+else {
+  say encode_json( $low->dfgs );
+}

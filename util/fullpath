@@ -1,0 +1,16 @@
+#!/usr/bin/env perl
+use v5.26;
+use warnings;
+use autodie qw(:all);
+
+use utf8;
+use open IO => qw/:encoding(UTF-8) :std/;
+
+use Path::Tiny;
+
+my $path = path(shift // die);
+
+print $path->absolute->stringify;
+
+
+# peco-get-fullpath

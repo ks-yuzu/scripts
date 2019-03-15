@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+FILE=$(ac ls HLS/LATEST/ | tac | peco)
+ac cp -f ac:HLS/LATEST/$FILE /tmp
+evince /tmp/$FILE

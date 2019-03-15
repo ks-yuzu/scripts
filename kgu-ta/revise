@@ -1,0 +1,103 @@
+#!/usr/bin/env perl
+use v5.24;
+use warnings;
+use diagnostics;
+
+use utf8;
+use open IO => qw/:encoding(UTF-8) :std/;
+
+use HTTP::Request;
+use HTTP::Request::Common qw/GET POST/;
+use LWP::UserAgent;
+use JSON;
+
+use Getopt::Kingpin;
+
+use DDP;
+use Encode;
+
+# my $SERVER  = 'http://localhost:5000';
+my $SERVER  = 'http://192.218.172.60:5000';
+my $SUBJECT = '2018prog1';
+my $CLASS   = 3;
+my $ID      = 'M7301';
+my $PW      = '';
+
+my $ua = LWP::UserAgent->new;
+
+my $kingpin = Getopt::Kingpin->new();
+my $subject = $kingpin->flag('subject', 'subject specification')->short('n')->default($SUBJECT)->string;
+my $class   = $kingpin->flag('class',   'class specification'  )->short('s')->default($CLASS)->string;
+my $round   = $kingpin->flag('round',   'round specification'  )->short('r')->required->string;
+my $ids_obj = $kingpin->arg('args', ' a list of arguments')->string_list;
+
+$kingpin->parse;
+my $ids = $ids_obj->value();
+
+# error check
+if ( grep { $_ !~ /^\d{4}$/ } @$ids ) { die "[error] invalid id\n" }
+if ( $round !~ /^[A-Z]\d{1,2}$/ )     { die "[error] invalid round\n" }
+
+main();
+
+
+sub login {
+  my $url = "$SERVER/api/login";
+  my $login_req = POST(
+    $url,
+    Content_Type => 'multipart/form-data',
+    Content      => [
+      ID => $ID,
+      PW => $PW
+    ]
+  );
+
+  return $ua->request($login_req);
+}
+
+
+sub get_req {
+  my ($url, $cookie) = @_;
+
+  my $req = GET( $url );
+  $req->header(%$cookie);
+
+  return $ua->request($req);
+}
+
+
+sub check {
+  my $res = shift;
+  if ( $res->is_error ) {
+    say STDERR $res->status_line;
+    exit 1;
+  }
+}
+
+
+sub res2hash {
+  my $res = shift;
+  check ( $res );
+  return JSON::decode_json($res->content);
+}
+
+
+sub main {
+  # セッション確立
+  my $login_res = login();
+  check( $login_res );
+
+  $login_res->header('Set-Cookie') =~ /(?<cookie>.*?=.*?);/;
+  my %cookie = (Cookie => $+{cookie});
+
+  # 実処理
+  for my $student ( @$ids ) {
+    my $res = get_req(
+      "${SERVER}/api/subjects/${subject}/classes/${class}/rounds/${round}/${student}/revise",
+      \%cookie
+    );
+    say "Request revise ($round/$student)";
+  }
+}
+
+

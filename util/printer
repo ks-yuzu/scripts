@@ -1,0 +1,23 @@
+#!/usr/bin/env perl
+use v5.26;
+use warnings;
+use autodie qw(:all);
+
+use utf8;
+use open IO => qw/:encoding(UTF-8) :std/;
+
+
+# ファイルチェック
+my $file = shift // die 'no input file';
+-f $file or die 'no such file';
+
+# プリンタ選択
+my $printer = qx/lpstat -p -d | grep '^printer' | peco | cut -d' ' -f2/;
+$printer or die 'printer is not selected';
+chomp $printer;
+
+# コマンドの表示
+say qq/lpr -P $printer $file/;
+
+# 印刷
+system qq/lpr -P $printer $file/;
