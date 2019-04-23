@@ -10,7 +10,13 @@ use diagnostics;
 
 use File::Basename;
 
-my @files = qx(find `pwd` -type f);
+use Getopt::Kingpin;
+my $kingpin  = Getopt::Kingpin->new();
+my $f_dryrun = $kingpin->flag('dry_run', 'dry run')->short('d')->bool;
+
+$kingpin->parse;
+
+
 # my @files = qx(find `pwd` -type f);
 my @files = qx(find `pwd` -type d -name disabled -prune -o -type f -print);
 
@@ -18,8 +24,10 @@ for my $file ( @files ) {
   chomp $file;
   next if $file =~ m!/.git/!;
 
-  my $res = qx(ln -s $file \$HOME/bin 2>&1);
+  my $res = $f_dryrun ? '' : qx(ln -s $file \$HOME/bin 2>&1);
 
   $res !~ /File exists/ and say "create symbolic link '\$HOME/bin/" . basename($file) . "'";
 }
+
+
 
