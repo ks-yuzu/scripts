@@ -11,6 +11,8 @@ use diagnostics;
 use File::Basename;
 
 my @files = qx(find `pwd` -type f);
+# my @files = qx(find `pwd` -type f);
+my @files = qx(find `pwd` -type d -name disabled -prune -o -type f -print);
 
 for my $file ( @files ) {
   chomp $file;
