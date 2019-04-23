@@ -28,8 +28,7 @@ sub main {
   elsif ( scalar @$selected_lines >= 2 ) { die "selected too many hosts\n" }
 
   my $selected_host  = extract_host_from_choiced_line(shift @$selected_lines);
-  # ssh($selected_host);
-  say $selected_host;
+  ssh($selected_host);
 }
 
 
@@ -95,5 +94,5 @@ sub extract_host_from_choiced_line {
 # 引数で指定した対象の 'Host' へ ssh する
 sub ssh {
   my $host = shift;
-  exec "ssh $host";
+  exec "ssh -t $host";
 }
