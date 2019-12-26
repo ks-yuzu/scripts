@@ -28,7 +28,8 @@ sub main {
   elsif ( scalar @$selected_lines >= 2 ) { die "selected too many hosts\n" }
 
   my $selected_host  = extract_host_from_choiced_line(shift @$selected_lines);
-  ssh($selected_host);
+  # ssh($selected_host);
+  say $selected_host;
 }
 
 
@@ -44,9 +45,21 @@ sub parse_config {
   $config =~ s/#.*\n//g;
 
   my $res = [];
-  my @matched = $config =~ /Host (?<host>.*?)\n(?<option>.*?)\n{2,}/sg;
+  # my @matched = $config =~ /Host (?<host>.+?)\n((?<option>.*?)\n{2,}|(?=\nHOST\s))/sg;
+  # while ( @matched ) {
+  #   my ($hostname, $options) = splice @matched, 0, 2;
+  #   push @$res, +{
+  #     Host => $hostname,
+  #     map { /\s+(\S+)\s+(\S+)/ and ($1 => $2) } split /\n+/, $options
+  #   };
+  # }
+
+  my @matched = $config =~ /Host\s(?<host>.+?)\n(?<option>(?:[ \t]+.+\n+)*)(?=[^\n])/g;
+
   while ( @matched ) {
     my ($hostname, $options) = splice @matched, 0, 2;
+    next if $hostname =~ /\*/;
+
     push @$res, +{
       Host => $hostname,
       map { /\s+(\S+)\s+(\S+)/ and ($1 => $2) } split /\n+/, $options
@@ -70,16 +83,19 @@ sub make_choices {
 
 
 sub get_user_and_host_str {
-  my $host = shift;
-  my $user = $_->{User};
-  return $user . ($user ? '@' : '') . $host->{HostName};
+  my ($host) = @_;
+
+  my $user     = $_->{User};
+  my $hostname = $host->{HostName} // '';
+
+  return ($user ? "$user@" : '') . $hostname;
 }
 
 
 # 引数で指定した文字列を出力し, peco で選択した結果全てを配列のリファレンスで返す
 sub select_by_peco {
   my $choices = shift;
-  return [ split "\n", qx!echo "$choices" | peco! ];
+  return [ split "\n", qx!echo "$choices" | peco --query "\$LBUFFER"! ];
 }
 
 
@@ -94,5 +110,5 @@ sub extract_host_from_choiced_line {
 # 引数で指定した対象の 'Host' へ ssh する
 sub ssh {
   my $host = shift;
-  exec "ssh -t $host";
+  exec "ssh -t -t $host";
 }
