@@ -1,0 +1,153 @@
+#!/usr/bin/env node
+
+'use strict'
+
+const AWS = require('aws-sdk')
+const {CloudWatchLogs} = AWS
+
+const execSync = require('child_process').execSync
+const cla = require('command-line-args')
+const moment = require('moment')
+
+const cloudWatchLogs = new CloudWatchLogs({region: 'ap-northeast-1'})
+
+
+// nextToken の類のものを使って全データを取得するユーティリティ
+const fetchAll = async (params) => {
+  const isContinue = params.isContinue || ((res) => !!res.nextToken)
+
+  let nextToken = undefined
+
+  let fullResult = []
+
+  while ( true ) {
+    const res = await params.fetchFunc(nextToken)
+    fullResult = fullResult.concat(res[params.resultKey])
+
+    const currentToken = nextToken
+    nextToken = res[params.nextTokenKey || 'nextToken']
+    if ( ! isContinue(res, currentToken) ) { break }
+  }
+
+  return {
+    result: fullResult,
+    nextToken: nextToken,
+  }
+}
+
+
+const fetchLogGroupList = async () => {
+  return await fetchAll({
+    fetchFunc: (nextToken) => cloudWatchLogs.describeLogGroups({nextToken}).promise(),
+    resultKey: 'logGroups',
+  })
+}
+
+
+const fetchLogStreamList = async (logGroupName) => {
+  return await fetchAll({
+    fetchFunc: (nextToken) => cloudWatchLogs.describeLogStreams({logGroupName, nextToken}).promise(),
+    resultKey: 'logStreams',
+  })
+}
+
+
+const fetchAllLogs = async (logGroupName, logStreamName, startTime) => {
+  return await fetchAll({
+    fetchFunc: (nextToken) => cloudWatchLogs.getLogEvents({
+      logGroupName,
+      logStreamName,
+      startFromHead: true,
+      nextToken,
+      startTime,
+    }).promise(),
+    resultKey: 'events',
+    nextTokenKey: 'nextForwardToken',
+    isContinue: (res, token) => token === res.nextForwardToken,
+  })
+}
+
+
+const epoch2time     = (epoch) => moment(epoch).format('HH:mm:ss')
+const epoch2datetime = (epoch) => moment(epoch).format('YYYY/MM/DD HH:mm:ss')
+
+
+; // main
+(async () => {
+  const optionDefinition = [
+    {name: 'group',  alias: 'g', type: String,  desc: 'ロググループを指定 (引数なしで一覧表示)'},
+    {name: 'stream', alias: 's', type: String,  desc: 'ログストリームを指定 (引数なしで一覧表示)'},
+    {name: 'peco',   alias: 'p', type: Boolean, desc: 'peco でロググループ/ログストリームを選択して見る'},
+    {name: 'follow', alias: 'f', type: Boolean, desc: 'tail -f 的な感じで見る (未実装)'},
+    {name: 'help',   alias: 'h', type: Boolean, desc: 'このヘルプを表示'},
+  ]
+  const options = cla(optionDefinition)
+
+  // note: options.<name> は未指定で undefined, 引数なし指定で null になる
+  if ( options.help ) {
+    usage(optionDefinition)
+    process.exit(0)
+  }
+
+  if ( options.group === undefined || options.group === null ) {
+    const list = (await fetchLogGroupList()).result.map((i) => i.logGroupName).join('\n')
+    if ( options.peco ) {
+      options.group = execSync(`echo "${list}" | peco`).toString().trim()
+    }
+    else {
+      console.log( list )
+    }
+  }
+
+  if ( options.group && (options.stream === undefined || options.stream === null) ) {
+    const streams = (await fetchLogStreamList(options.group)).result
+    const list = streams.sort((a, b) => b.firstEventTimestamp - a.firstEventTimestamp).map(
+        (i) => `${i.logStreamName} ${epoch2time(i.firstEventTimestamp)} - ${epoch2time(i.lastEventTimestamp)} ${i.storedBytes || '(long)'}`
+    ).join('\n')
+
+    if ( options.peco ) {
+      options.stream = execSync(`echo '${list.replace(/'/g, '')}' | peco | cut -d' ' -f1`).toString().trim()
+    }
+    else {
+      console.log( list )
+    }
+  }
+
+  if ( options.group && options.stream ) {
+    const formatLog = (log) => log.map((i) => `${moment(i.timestamp).format('YYYY/MM/DD hh:mm:ss')}: ${i.message}`).join('')
+    if ( ! options.follow ) {
+      console.log(
+        formatLog( (await fetchAllLogs(options.group, options.stream)).result)
+      )
+    }
+    else {
+      const sleep = (sec) => { return new Promise((resolve) => setTimeout(resolve, sec * 1000))}
+
+      let startTime = 0
+      while ( true ) {
+        const {result: log} = await fetchAllLogs(options.group, options.stream, startTime)
+        if ( log.length > 0 ) {
+          startTime = log[log.length - 1].timestamp + 1
+          console.log( formatLog(log) )
+        }
+        await sleep(2)
+      }
+    }
+  }
+
+  if ( options.peco ) {
+    process.stderr.write('\nYou can fetch this stream again using the command line\n')
+    process.stderr.write(`  cloudwatch-logs -g ${options.group} -s '${options.stream}'\n`)
+  }
+})()
+
+
+function usage(optionDefinition) {
+  console.log('Usage:')
+  console.log('  <script name>.js [OPTIONS]') // TODO:
+  console.log('')
+  console.log('Options:')
+  console.log(
+    optionDefinition.map((i) => `  -${i.alias}, --${i.name.padEnd(10)}  ${i.desc || ''}`).join('\n')
+  )
+}
